@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>LocalCast</title>
+    <meta name="description" content="Private live audio for people on your local network.">
+    <link rel="stylesheet" href="/style.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="LocalCast home">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        LocalCast
+      </a>
+      <span class="privacy">Local audio. No cloud.</span>
+    </header>
+
+    <main>
+      <section id="signin" class="signin" aria-labelledby="signin-title">
+        <div class="intro">
+          <p class="eyebrow">Private live audio</p>
+          <h1 id="signin-title">Share one microphone with the room.</h1>
+          <p class="lede">Broadcast from this browser. Everyone with the password can listen live.</p>
+        </div>
+
+        <form id="join-form" class="join-form">
+          <fieldset>
+            <legend>How are you joining?</legend>
+            <div class="mode-picker">
+              <label><input type="radio" name="role" value="broadcast"><span>Broadcast</span></label>
+              <label><input type="radio" name="role" value="listen" checked><span>Listen</span></label>
+              <label><input type="radio" name="role" value="service"><span>Background service</span></label>
+            </div>
+          </fieldset>
+          <p>Background service captures the server computer's microphone. It keeps broadcasting when you close this page and requires server setup.</p>
+          <label class="field">
+            <span>Password</span>
+            <input id="password" name="password" type="password" minlength="8" maxlength="200" autocomplete="current-password" required>
+          </label>
+          <label class="record-option">
+            <input id="remember-password" type="checkbox" aria-describedby="remember-password-note">
+            <span>Remember password on this device</span>
+          </label>
+          <p id="remember-password-note">Stores the password in this browser. Use only on a trusted device.</p>
+          <div id="join-service-input-field" hidden>
+            <label class="field" for="join-service-input"><span>Server input device</span></label>
+            <select id="join-service-input"><option value="">Configured input</option></select>
+            <button id="load-service-inputs" class="secondary" type="button">Load server inputs</button>
+            <p>Enter the password to list the server's inputs.</p>
+          </div>
+          <label class="record-option">
+            <input id="record-local" name="record-local" type="checkbox">
+            <span>Save a recording on this device</span>
+          </label>
+          <label id="record-server-option" class="record-option" hidden>
+            <input id="record-server" name="record-server" type="checkbox">
+            <span>Save a recording on the server</span>
+          </label>
+          <p id="form-error" class="form-error" role="alert"></p>
+          <button id="join-button" class="primary" type="submit">Join audio</button>
+        </form>
+      </section>
+
+      <section id="studio" class="studio" aria-labelledby="studio-title" hidden>
+        <div class="visualization">
+          <label for="visualization-mode">Audio visualization</label>
+          <select id="visualization-mode">
+            <option value="wave">Waveform</option>
+            <option value="spectrum">Spectrum</option>
+            <option value="level">Level meter</option>
+            <option value="off">Off</option>
+          </select>
+          <canvas id="visualization" width="800" height="180" role="img" aria-label="Live audio waveform"></canvas>
+          <p id="visualization-status" class="connection-status" aria-live="polite"></p>
+        </div>
+        <p id="mode-label" class="eyebrow">Listening</p>
+        <h1 id="studio-title">Waiting for the broadcast.</h1>
+        <p id="connection-status" class="connection-status" aria-live="polite">Connecting securely...</p>
+        <p id="background-status" class="connection-status" aria-live="polite"></p>
+        <p id="recording-status" class="recording-status" aria-live="polite" hidden></p>
+        <fieldset id="voice-filters" class="voice-filters" hidden>
+          <legend>Voice filters · HPF → Expander → Compressor → Limiter</legend>
+          <label class="record-option"><input id="filter-bypass" type="checkbox">Bypass all processing for comparison</label>
+          <div class="filter-grid">
+            <div><label class="record-option"><input id="hpf-enabled" type="checkbox" checked>High-pass filter</label>
+              <label class="filter-field">Cutoff (Hz)<input id="filter-cutoff" type="number" min="60" max="130" step="1" value="90"></label>
+              <label class="filter-field">Slope<select id="filter-slope"><option value="12">12 dB/octave</option><option value="24">24 dB/octave</option></select></label>
+            </div>
+            <div><label class="record-option"><input id="gate-enabled" type="checkbox" checked>Downward expander</label>
+              <label class="filter-field">Threshold (dB)<input id="filter-gate-threshold" type="number" min="-70" max="-25" step="1" value="-50"></label>
+            </div>
+            <div><label class="record-option"><input id="compressor-enabled" type="checkbox" checked>Compressor</label>
+              <label class="filter-field">Threshold (dB)<input id="filter-threshold" type="number" min="-23" max="-15" step="1" value="-20"></label>
+              <label class="filter-field">Ratio (:1)<input id="filter-ratio" type="number" min="3" max="4" step="0.1" value="3"></label>
+              <label class="filter-field">Attack (ms)<input id="filter-attack" type="number" min="1" max="6" step="1" value="3"></label>
+              <label class="filter-field">Release (ms)<input id="filter-release" type="number" min="25" max="100" step="1" value="60"></label>
+            </div>
+            <div><label class="record-option"><input id="limiter-enabled" type="checkbox" checked>Limiter</label>
+              <label class="filter-field">Ceiling (dB)<input id="filter-ceiling" type="number" min="-9" max="-5" step="1" value="-7"></label>
+            </div>
+          </div>
+          <label class="filter-field">Processed output trim (dB)<input id="filter-trim" type="number" min="-18" max="18" step="1" value="0"></label>
+          <p>Start at 80–100 Hz for most voices, 60–90 Hz for deeper voices, or 90–130 Hz for higher voices. Lower the cutoff if the voice loses body.</p>
+          <p>Compare through a listener with headphones. Adjust output trim until processed and bypassed speech sound equally loud, then check in the full mix. Bypass changes the live broadcast and recordings. Trim is applied before the limiter.</p>
+        </fieldset>
+        <label id="service-input-field" class="filter-field" hidden>Server input device
+          <select id="service-input"></select>
+        </label>
+        <div class="actions">
+          <button id="service-start" class="primary" type="button" hidden>Start background broadcast</button>
+          <button id="service-stop" class="secondary" type="button" hidden>Stop background broadcast</button>
+          <button id="audio-button" class="primary" type="button" hidden>Enable sound</button>
+          <button id="leave-button" class="secondary" type="button">Leave</button>
+        </div>
+        <audio id="audio" autoplay></audio>
+      </section>
+    </main>
+
+    <footer>
+      <span>Live audio stays between browsers.</span>
+      <span>One broadcaster at a time.</span>
+    </footer>
+  </body>
+</html>

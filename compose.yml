@@ -1,0 +1,37 @@
+services:
+  localcast:
+    build:
+      context: .
+      args:
+        AUDIO_UID: "${AUDIO_UID:-1000}"
+    environment:
+      BROADCAST_PASSWORD: "${BROADCAST_PASSWORD:?Set BROADCAST_PASSWORD in .env}"
+      RECORDINGS_DIR: "${RECORDINGS_DIR:-}"
+      SERVICE_AUDIO_DEVICE: "${SERVICE_AUDIO_DEVICE:-default}"
+      SERVICE_AUDIO_FORMAT: "${SERVICE_AUDIO_FORMAT:-pulse}"
+      PULSE_SERVER: unix:/run/pulse/native
+    devices:
+      - /dev/snd:/dev/snd
+    group_add:
+      - "${AUDIO_GID:-18}"
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    volumes:
+      - recordings:/recordings
+      - type: bind
+        source: "${XDG_RUNTIME_DIR:-/run/user/1000}/pulse/native"
+        target: /run/pulse/native
+        read_only: true
+        bind:
+          create_host_path: false
+
+volumes:
+  recordings:

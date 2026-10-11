@@ -1,0 +1,13 @@
+[Unit]
+Description=LocalCast microphone broadcast and web controls
+
+[Service]
+WorkingDirectory=%h/micweb
+EnvironmentFile=%h/.config/localcast.env
+ExecStart=/usr/bin/python3 %h/micweb/server.py
+Restart=on-failure
+KillSignal=SIGINT
+KillMode=control-group
+
+[Install]
+WantedBy=default.target
