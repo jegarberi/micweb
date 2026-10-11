@@ -46,8 +46,8 @@ class Hub:
         self.service = None
 
     def create_session(self, supplied_password: object, role: object) -> Session:
-        if role not in {"broadcast", "listen", "service"}:
-            raise ValueError("Choose broadcast or listen.")
+        if role not in {"broadcast", "listen", "service", "conference"}:
+            raise ValueError("Choose broadcast, listen, conference, or service.")
         if not isinstance(supplied_password, str) or not hmac.compare_digest(
             supplied_password, self.password
         ):
@@ -81,6 +81,11 @@ class Hub:
                     if current is not session and current.role == "broadcast" and current.connected:
                         current.events.put({"type": "replaced"})
                         del self.sessions[token]
+            # shortcut: conference uses a peer mesh; use a media relay for large rooms.
+            if session.role == "conference":
+                for current in self.sessions.values():
+                    if current is not session and current.role == "conference" and current.connected:
+                        current.events.put({"type": "peer-joined", "peer": session.peer_id})
             session.connected = True
             if session.role == "listen":
                 broadcaster = self._broadcaster()
@@ -103,6 +108,10 @@ class Hub:
             if not session.connected:
                 return
             session.connected = False
+            if session.role == "conference":
+                for current in self.sessions.values():
+                    if current.role == "conference" and current.connected:
+                        current.events.put({"type": "peer-left", "peer": session.peer_id})
             if session.role == "listen":
                 broadcaster = self._broadcaster()
                 if broadcaster:
@@ -122,7 +131,9 @@ class Hub:
                 None,
             )
             if (not destination or not destination.connected
-                    or {sender.role, destination.role} != {"broadcast", "listen"}):
+                    or destination is sender
+                    or not ({sender.role, destination.role} == {"broadcast", "listen"}
+                            or sender.role == destination.role == "conference")):
                 raise ValueError("Peer is unavailable.")
             destination.events.put(
                 {"type": "signal", "peer": sender.peer_id, "data": data}

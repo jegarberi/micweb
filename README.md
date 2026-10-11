@@ -22,6 +22,14 @@ Select **Remember password on this device** to fill it in on future visits. It i
 
 Both broadcasters and listeners can select **Waveform**, **Spectrum**, **Level meter**, or **Off** in the studio. Visualizations use the live microphone or received audio and do not change playback or recordings.
 
+## Conference
+
+Choose **Conference** on each participant's browser and enter the shared password. Everyone in Conference sends their microphone and hears all other conference participants at the same time. Use headphones to avoid feedback. Microphone access requires HTTPS or localhost.
+
+Voice filters apply to your outgoing microphone. The visualization shows your microphone; **Save a recording on this device** records your voice and the other participants together. Server recording is available only for Broadcast. Conference is separate from Broadcast/Listen and Background service audio.
+
+Conference uses direct WebRTC connections between every pair of participants, without STUN or TURN, and is intended for small groups on the same local network. Each additional participant increases the connections and audio upload needed on every device.
+
 ## Background audio
 
 ### Optional background service
@@ -136,6 +144,7 @@ node tests/visualization.cjs
 node tests/voice-processing.cjs
 node tests/background.cjs
 node tests/password.cjs
+node tests/conference.cjs
 ```
 
 ## Network notes

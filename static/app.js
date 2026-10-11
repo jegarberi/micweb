@@ -200,6 +200,9 @@ visualizationMode.addEventListener("change", () => {
 
 let role;
 let localStream;
+let conferenceOutput;
+let conferenceRecording;
+const conferenceSources = new Map();
 let events;
 let recorder;
 let localRecording = false;
@@ -387,7 +390,7 @@ form.addEventListener("submit", async (event) => {
   role = new FormData(form).get("role");
 
   try {
-    setAudioSession(role === "broadcast" ? "play-and-record" : "playback");
+    setAudioSession(["broadcast", "conference"].includes(role) ? "play-and-record" : "playback");
     if (role !== "service") resumeVisualization();
     const session = await request("/api/session", {
       method: "POST",
@@ -405,7 +408,7 @@ form.addEventListener("submit", async (event) => {
     if (role === "listen" && session.service.running && localRecording) {
       throw new Error("Device recording is unavailable for service audio. Uncheck recording to listen.");
     }
-    if (role === "broadcast") {
+    if (["broadcast", "conference"].includes(role)) {
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error("Microphone access requires HTTPS or localhost.");
       }
@@ -414,15 +417,29 @@ form.addEventListener("submit", async (event) => {
       });
       localStream = await startVoiceProcessing(microphoneStream);
       startVisualization(localStream);
-      if (localRecording || serverRecording) await startRecording(localStream);
+      if (role === "conference") {
+        conferenceOutput = audioContext.createMediaStreamDestination();
+        conferenceRecording = audioContext.createMediaStreamDestination();
+        const source = audioContext.createMediaStreamSource(localStream);
+        source.connect(conferenceRecording);
+        voiceNodes.push(source);
+        audio.srcObject = conferenceOutput.stream;
+        audio.play().catch(() => { audioButton.hidden = false; });
+      }
+      if (localRecording || serverRecording) await startRecording(role === "conference" ? conferenceRecording.stream : localStream);
     }
-    voiceFilters.hidden = role !== "broadcast";
+    voiceFilters.hidden = !["broadcast", "conference"].includes(role);
     signin.hidden = true;
     studio.hidden = false;
     keepScreenAwake();
     modeLabel.textContent = role === "service" ? "Background service" : role === "broadcast" ? "Broadcasting" : "Listening";
     title.textContent = role === "broadcast" ? "Your microphone is live." : "Waiting for the broadcast.";
     setStatus(role === "broadcast" ? "No listeners connected yet." : "Connected. Waiting for audio.", role === "broadcast");
+    if (role === "conference") {
+      modeLabel.textContent = "Conference";
+      title.textContent = "Your microphone is live in the conference.";
+      setStatus("Waiting for other conference participants.", true);
+    }
     showRecordingStatus();
     await updateService(session.service);
     if (role === "service" && session.service.enabled) {
@@ -460,7 +477,7 @@ function connectEvents() {
   events.onmessage = async ({ data }) => {
     const event = JSON.parse(data);
     try {
-      if (event.type === "peer-joined" && role === "broadcast") await offerTo(event.peer);
+      if (event.type === "peer-joined" && ["broadcast", "conference"].includes(role)) await offerTo(event.peer);
       if (event.type === "peer-left") closePeer(event.peer);
       if (event.type === "signal") await receiveSignal(event.peer, event.data);
       if (event.type === "replaced") leave("Another broadcaster took over.");
@@ -481,7 +498,9 @@ function createPeer(peerId) {
   };
   connection.onconnectionstatechange = () => {
     const active = [...peers.values()].filter((peer) => peer.connectionState === "connected").length;
-    if (role === "broadcast") {
+    if (role === "conference") {
+      setStatus(active ? `${active} conference participant${active === 1 ? "" : "s"} connected.` : "Waiting for other conference participants.", true);
+    } else if (role === "broadcast") {
       setStatus(active ? `${active} listener${active === 1 ? "" : "s"} connected.` : "No listeners connected yet.", true);
     } else if (connection.connectionState === "connected") {
       title.textContent = "You are listening live.";
@@ -492,6 +511,15 @@ function createPeer(peerId) {
     }
   };
   connection.ontrack = async ({ streams }) => {
+    if (role === "conference") {
+      conferenceSources.get(peerId)?.disconnect();
+      const source = audioContext.createMediaStreamSource(streams[0]);
+      source.connect(conferenceOutput);
+      source.connect(conferenceRecording);
+      conferenceSources.set(peerId, source);
+      audio.play().catch(() => { audioButton.hidden = false; });
+      return;
+    }
     audio.srcObject = streams[0];
     startVisualization(streams[0]);
     audio.play().catch(() => { audioButton.hidden = false; });
@@ -504,13 +532,14 @@ function createPeer(peerId) {
       }
     }
   };
+  if (role === "conference") localStream.getTracks().forEach((track) => connection.addTrack(track, localStream));
   peers.set(peerId, connection);
   return connection;
 }
 
 async function offerTo(peerId) {
   const connection = createPeer(peerId);
-  localStream.getTracks().forEach((track) => connection.addTrack(track, localStream));
+  if (role !== "conference") localStream.getTracks().forEach((track) => connection.addTrack(track, localStream));
   await connection.setLocalDescription(await connection.createOffer());
   await sendSignal(peerId, { description: connection.localDescription });
 }
@@ -637,6 +666,8 @@ async function stopRecording() {
 }
 
 function closePeer(peerId) {
+  conferenceSources.get(peerId)?.disconnect();
+  conferenceSources.delete(peerId);
   if (role === "listen" && peers.has(peerId)) {
     stopVisualization();
     audio.srcObject = null;
@@ -684,6 +715,9 @@ async function leave(message = "") {
   }
   peers.forEach((connection) => connection.close());
   peers.clear();
+  conferenceSources.forEach((source) => source.disconnect());
+  conferenceSources.clear();
+  conferenceOutput = conferenceRecording = undefined;
   localStream?.getTracks().forEach((track) => track.stop());
   localStream = undefined;
   audio.srcObject = null;

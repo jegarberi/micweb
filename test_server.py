@@ -81,6 +81,29 @@ class HubTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.hub.relay(listener, other_listener.peer_id, {"candidate": "no"})
 
+    def test_conference_discovery_relay_and_departure(self):
+        first, second, third = [self.hub.create_session("correct horse", "conference")
+                                for _ in range(3)]
+        self.hub.connect(first)
+        self.hub.connect(second)
+        self.assertEqual(first.events.get_nowait(), {"type": "peer-joined", "peer": second.peer_id})
+        self.assertTrue(second.events.empty())
+        self.hub.connect(third)
+        for participant in (first, second):
+            self.assertEqual(participant.events.get_nowait()["peer"], third.peer_id)
+        self.hub.relay(second, first.peer_id, {"description": {"type": "answer"}})
+        self.assertEqual(first.events.get_nowait()["peer"], second.peer_id)
+        listener = self.hub.create_session("correct horse", "listen")
+        self.hub.connect(listener)
+        for target in (listener, first):
+            with self.assertRaises(ValueError):
+                self.hub.relay(first, target.peer_id, {})
+        self.hub.disconnect(third)
+        for participant in (first, second):
+            self.assertEqual(participant.events.get_nowait(), {"type": "peer-left", "peer": third.peer_id})
+        with self.assertRaises(ValueError):
+            self.hub.relay(first, third.peer_id, {})
+
     def test_new_broadcaster_replaces_old_session(self):
         old = self.hub.create_session("correct horse", "broadcast")
         self.hub.connect(old)
